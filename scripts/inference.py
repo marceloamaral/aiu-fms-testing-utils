@@ -10,7 +10,7 @@ import random
 import time
 
 # Third Party
-from aiu_fms_testing_utils.utils import aiu_setup, warmup_model, stagger_region
+from aiu_fms_testing_utils.utils import aiu_setup, warmup_model, stagger_region, aiu_profile
 from aiu_fms_testing_utils.utils.aiu_setup import dprint, rank, local_rank, world_size
 import numpy as np
 import torch
@@ -22,7 +22,6 @@ from fms.utils import generation
 from fms.utils.generation import pad_input_ids
 
 from transformers import AutoTokenizer
-
 
 # This example script validates the LLaMA implementation by running inference on a couple of prompts.
 #
@@ -334,6 +333,9 @@ if args.device_type == "cuda":
     torch.cuda.set_device(device)
 elif is_aiu_backend:
     from torch_sendnn import torch_sendnn  # noqa
+    # Register custom backend for pytorch profiling here sice it must be done after the distributed
+    torch.utils.rename_privateuse1_backend("aiu")
+    torch._register_device_module("aiu", torch_sendnn.sendnn_backend)
 
     if not args.distributed:
         aiu_setup.aiu_setup(rank, world_size)
@@ -819,12 +821,12 @@ def infer(use_cache, do_sample, warmup):
                     )
             timings = [f"{t * 1000:.3f}" for t in timings]
             dprint(f"Per-token timing information: {', '.join(timings)} ms")
-    if len(result.shape) == 1:
-        result = result.unsqueeze(0)
+        if len(result.shape) == 1:
+            result = result.unsqueeze(0)
 
-    if not warmup:
-        for i in range(result.shape[0]):
-            print_result(result[i], i)
+        if not warmup:
+            for i in range(result.shape[0]):
+                print_result(result[i], i)
 
 
 do_sample = [False]
@@ -864,6 +866,9 @@ if args.compile:
 
 dprint("generating output")
 
-for sample, cache in itertools.product(do_sample, use_cache):
-    for _ in range(args.iters):
-        infer(cache, sample, False)
+name_prefix = f"{args.tokenizer.split("/")[-1]}-seq_len-{ids.shape[1]}"
+# aiu_profile only profiles the code if the the env variable ENABLE_TORCH_PROFILING=1
+with aiu_profile(name_prefix, iters=args.iters) as prof:
+    for i, (sample, cache) in enumerate(itertools.product(do_sample, use_cache)):
+        for j in range(args.iters):
+            infer(cache, sample, False)

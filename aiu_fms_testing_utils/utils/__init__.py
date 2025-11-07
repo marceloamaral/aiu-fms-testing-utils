@@ -19,6 +19,9 @@ import math
 import contextlib
 import warnings
 
+from .aiu_profiler import aiu_profile
+
+__all__ = ["aiu_profile", "aiu_setup", "warmup_model", "stagger_region"]
 
 @contextlib.contextmanager
 def stagger_region(limit: int):
