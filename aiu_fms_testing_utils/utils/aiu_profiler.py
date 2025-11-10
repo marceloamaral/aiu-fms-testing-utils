@@ -43,7 +43,7 @@ def isolate_prefill_events(prof, root_event_prefix="Torch-Compiled Region: 0/0")
         tr = getattr(e, "time_range", None)
         return getattr(tr, "end", 0) if tr else 0
 
-    # Sort by start time
+    # Sort events by start time
     events.sort(key=get_start)
 
     prefill_events, decode_events = [], []
@@ -54,12 +54,10 @@ def isolate_prefill_events(prof, root_event_prefix="Torch-Compiled Region: 0/0")
         print("No iteration markers found; cannot isolate prefill.")
         return prefill_events, events  # fallback
 
-    # First iteration as reference
-    iter_end = get_end(iteration_events[0])
+    # Take the last iteration event by *latest end time* since the prefill can have multiple batches.
+    iter_end = max(iteration_events, key=get_end)
+    split_time = get_end(iter_end)
 
-    # eps = 1.005 # 0.5%
-    # split_time = iter_end * eps
-    split_time = iter_end 
     prefill_events = [e for e in events if get_end(e) <= split_time]
     decode_events = [e for e in events if get_start(e) > split_time]
     return prefill_events, decode_events

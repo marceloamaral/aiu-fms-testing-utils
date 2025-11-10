@@ -872,3 +872,5 @@ with aiu_profile(name_prefix, iters=args.iters) as prof:
     for i, (sample, cache) in enumerate(itertools.product(do_sample, use_cache)):
         for j in range(args.iters):
             infer(cache, sample, False)
+            if prof is not None:
+                prof.step()
